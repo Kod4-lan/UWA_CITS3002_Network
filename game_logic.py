@@ -2,6 +2,12 @@ from battleship import Board, parse_coordinate, SHIPS
 import threading
 
 def run_two_player_game(p1, p2):
+    # Send connection confirmation before prompting setup
+    p1['wfile'].write("Both players connected! Game will start soon...\n")
+    p2['wfile'].write("Both players connected! Game will start soon...\n")
+    p1['wfile'].flush()
+    p2['wfile'].flush()
+
     # Initialize player boards with M/R placement
     setup_player_board(p1)
     setup_player_board(p2)
