@@ -11,23 +11,49 @@ However, if you want to support multiple clients (i.e. progress through further 
 """
 
 import socket
+import threading
 from battleship import run_single_player_game_online
 
 HOST = '127.0.0.1'
 PORT = 5000
 
+clients = []  # [(conn, addr, rfile, wfile)]
+
+def handle_client(player_id, conn, addr, rfile, wfile, start_event):
+    # Koda: Waiting for the client to send a command
+    wfile.write(f"Welcome Player {player_id + 1}! Waiting for the other player to connect...\n")
+    wfile.flush()
+    start_event.wait()  # Koda: Block until both players are connected
+    wfile.write("Both players connected! Game will start soon...\n")
+    wfile.flush() 
+    # Koda: Placeholder for the game logic
+    conn.close()  # Koda: Close the connection after the game ends   
+
+
 def main():
     print(f"[INFO] Server listening on {HOST}:{PORT}")
-    with socket.socket(socket.AF_INET, socket.SOCK_STREAM) as s:
-        s.bind((HOST, PORT))
-        s.listen(2)
-        conn, addr = s.accept()
-        print(f"[INFO] Client connected from {addr}")
-        with conn:
+    with socket.socket(socket.AF_INET, socket.SOCK_STREAM) as server_sock:
+        server_sock.bind((HOST, PORT))
+        server_sock.listen(2)
+
+        start_event = threading.Event()
+
+        for player_id in range(2):
+            conn, addr = server_sock.accept()
+            print(f"[INFO] Player {player_id + 1} connected from {addr}")
             rfile = conn.makefile('r')
             wfile = conn.makefile('w')
-            run_single_player_game_online(rfile, wfile)
-        print("[INFO] Client disconnected.")
+            clients.append((conn, addr, rfile, wfile))
+
+            thread = threading.Thread(
+                target=handle_client,
+                args=(player_id, conn, addr, rfile, wfile, start_event),
+                daemon=True
+            )
+            thread.start()
+        # Koda: Wait for both players to connect
+        print("[INFO] Both players connected. Game can begin.")
+        start_event.set()
 
 # HINT: For multiple clients, you'd need to:
 # 1. Accept connections in a loop
