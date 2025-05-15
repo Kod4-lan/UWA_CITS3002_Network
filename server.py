@@ -26,7 +26,6 @@ def handle_client(player_id, conn, addr, rfile, wfile, start_event):
     wfile.write(f"Welcome Player {player_id + 1}! Waiting for the other player to connect...\n")
     wfile.flush()
     start_event.wait()  # Koda: Block until both players are connected
-    wfile.write("Both players connected! Game will start soon...\n")
     wfile.flush() 
     # Koda: Placeholder for the game logic  
 
