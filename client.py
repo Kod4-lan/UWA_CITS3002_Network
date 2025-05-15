@@ -8,9 +8,13 @@ TODO: Fix the message synchronization issue using concurrency (Tier 1, item 1).
 """
 
 import socket
+import threading
 
 HOST = '127.0.0.1'
 PORT = 5000
+
+# Koda: A global variable to control the running state of the threads
+running = True
 
 # HINT: The current problem is that the client is reading from the socket,
 # then waiting for user input, then reading again. This causes server
@@ -22,40 +26,45 @@ PORT = 5000
 #
 # import threading
 
+def receive_messages(rfile):
+    while running:
+        line = rfile.readline()
+        if not line:
+            print("[INFO] Server disconnected.")
+            break
+        line = line.strip()
+
+        if line == "GRID":
+            print("\n[Board]")
+            while True:
+                board_line = rfile.readline()
+                if not board_line or board_line.strip() == "":
+                    break
+                print(board_line.strip())
+        else:
+            print(line)
+
 def main():
+    global running
+    # Koda: Set up connection
     with socket.socket(socket.AF_INET, socket.SOCK_STREAM) as s:
         s.connect((HOST, PORT))
         rfile = s.makefile('r')
         wfile = s.makefile('w')
 
+        # Koda: Start a thread for receiving messages
+        threading.Thread(target=receive_messages, args=(rfile,), daemon=True).start()
+
         try:
-            while True:
-                # PROBLEM: This design forces the client to alternate between
-                # reading a message and sending input, which doesn't work when
-                # the server sends multiple messages in sequence
-                
-                line = rfile.readline()
-                if not line:
-                    print("[INFO] Server disconnected.")
-                    break
-
-                line = line.strip()
-
-                if line == "GRID":
-                    # Begin reading board lines
-                    print("\n[Board]")
-                    while True:
-                        board_line = rfile.readline()
-                        if not board_line or board_line.strip() == "":
-                            break
-                        print(board_line.strip())
-                else:
-                    # Normal message
-                    print(line)
-
+            while running:
                 user_input = input(">> ")
+                if user_input.lower() == "quit":
+                    running = False
                 wfile.write(user_input + '\n')
                 wfile.flush()
+        except KeyboardInterrupt:
+            print("\n[INFO] Client exiting.")
+            running = False
 
         except KeyboardInterrupt:
             print("\n[INFO] Client exiting.")
