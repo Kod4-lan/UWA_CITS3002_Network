@@ -12,7 +12,9 @@ However, if you want to support multiple clients (i.e. progress through further 
 
 import socket
 import threading
-from battleship import run_single_player_game_online
+from battleship import run_single_player_game_online,Board, parse_coordinate, SHIPS
+from game_logic import run_two_player_game
+# Koda: Server code for a two-player Battleship game
 
 HOST = '127.0.0.1'
 PORT = 5000
@@ -26,8 +28,7 @@ def handle_client(player_id, conn, addr, rfile, wfile, start_event):
     start_event.wait()  # Koda: Block until both players are connected
     wfile.write("Both players connected! Game will start soon...\n")
     wfile.flush() 
-    # Koda: Placeholder for the game logic
-    conn.close()  # Koda: Close the connection after the game ends   
+    # Koda: Placeholder for the game logic  
 
 
 def main():
@@ -54,6 +55,9 @@ def main():
         # Koda: Wait for both players to connect
         print("[INFO] Both players connected. Game can begin.")
         start_event.set()
+        p1 = {"conn": clients[0][0], "rfile": clients[0][2], "wfile": clients[0][3]}
+        p2 = {"conn": clients[1][0], "rfile": clients[1][2], "wfile": clients[1][3]}
+        run_two_player_game(p1, p2)
 
 # HINT: For multiple clients, you'd need to:
 # 1. Accept connections in a loop
