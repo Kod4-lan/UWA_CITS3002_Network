@@ -2,7 +2,7 @@ from battleship import Board, parse_coordinate, SHIPS
 import threading
 
 def run_two_player_game(p1, p2):
-    # Send connection confirmation before prompting setup
+    # Notify both players before ship placement
     p1['wfile'].write("Both players connected! Game will start soon...\n")
     p2['wfile'].write("Both players connected! Game will start soon...\n")
     p1['wfile'].flush()
@@ -12,11 +12,11 @@ def run_two_player_game(p1, p2):
     setup_player_board(p1)
     setup_player_board(p2)
 
-    # Send players their own initial board
+    # Send each player their full own board
     send_own_board(p1['wfile'], p1['board'])
     send_own_board(p2['wfile'], p2['board'])
 
-    # Notify players of game start and turn order
+    # Start game
     p1['wfile'].write("Game started! You are Player 1.\n")
     p2['wfile'].write("Game started! You are Player 2.\n")
     p1['wfile'].write("You go first.\n")
@@ -31,49 +31,50 @@ def run_two_player_game(p1, p2):
         current = players[turn]
         opponent = players[1 - turn]
 
-        # Show opponent board (partial view)
+        # Show opponent board before each turn
         send_board(current['wfile'], opponent['board'])
-        current['wfile'].write("Your turn! Enter coordinate to fire at (e.g. B5):\n")
+        current['wfile'].write("Your turn! Enter command (e.g. FIRE B5):\n")
         current['wfile'].flush()
 
-        coord_str = current['rfile'].readline()
-        if not coord_str:
+        line = current['rfile'].readline()
+        if not line:
             break
 
-        coord_str = coord_str.strip()
-
-        if coord_str.lower() == 'quit':
-            current['wfile'].write("You forfeited the game.\n")
-            opponent['wfile'].write("Opponent forfeited. You win!\n")
+        line = line.strip()
+        if line.lower() == 'quit':
+            current['wfile'].write("RESULT FORFEIT\n")
+            opponent['wfile'].write("MESSAGE Opponent forfeited. You win!\nRESULT WIN\n")
             current['wfile'].flush()
             opponent['wfile'].flush()
             break
 
+        parts = line.split()
+        if len(parts) != 2 or parts[0].upper() != "FIRE":
+            current['wfile'].write("RESULT INVALID INPUT (eg.Use FIRE B2)\n")
+            current['wfile'].flush()
+            continue
+
         try:
-            row, col = parse_coordinate(coord_str)
+            row, col = parse_coordinate(parts[1])
             result, sunk = opponent['board'].fire_at(row, col)
 
             if result == 'hit':
-                msg = f"HIT!{' You sank the ' + sunk + '!' if sunk else ''}\n"
+                if sunk:
+                    current['wfile'].write(f"RESULT HIT {sunk.upper()}\n")
+                else:
+                    current['wfile'].write("RESULT HIT\n")
             elif result == 'miss':
-                msg = "MISS!\n"
+                current['wfile'].write("RESULT MISS\n")
             elif result == 'already_shot':
-                msg = "Already shot here. Try again.\n"
-                current['wfile'].write(msg)
-                current['wfile'].flush()
-                continue
-
-            current['wfile'].write(msg)
-            opponent['wfile'].write(f"Opponent fired at {coord_str} → {result.upper()}\n")
+                current['wfile'].write("RESULT ALREADY\n")
             current['wfile'].flush()
-            opponent['wfile'].flush()
 
-            # Send updated board
+            # Show updated board after the move
             send_board(current['wfile'], opponent['board'])
 
             if opponent['board'].all_ships_sunk():
-                current['wfile'].write("\nYou WIN!\n")
-                opponent['wfile'].write("\nYou LOSE! All your ships have been sunk.\n")
+                current['wfile'].write("RESULT WIN\n")
+                opponent['wfile'].write("RESULT LOSE\n")
                 current['wfile'].flush()
                 opponent['wfile'].flush()
                 break
@@ -81,7 +82,7 @@ def run_two_player_game(p1, p2):
             turn = 1 - turn
 
         except Exception as e:
-            current['wfile'].write(f"Invalid input: {e}\n")
+            current['wfile'].write(f"RESULT INVALID\n")
             current['wfile'].flush()
             continue
 
@@ -89,7 +90,7 @@ def run_two_player_game(p1, p2):
     p2['conn'].close()
 
 def send_board(wfile, board):
-    # Send the opponent board (only known hits and misses)
+    # Send the opponent's board view to the player (only hits and misses are visible)
     wfile.write("GRID\n")
     wfile.write("  " + " ".join(str(i + 1).rjust(2) for i in range(board.size)) + '\n')
     for r in range(board.size):
@@ -100,7 +101,7 @@ def send_board(wfile, board):
     wfile.flush()
 
 def send_own_board(wfile, board):
-    # Send the player's own full board (including ship positions)
+    # Send the player's full board including ship positions
     wfile.write("GRID_SELF\n")
     wfile.write("  " + " ".join(str(i + 1).rjust(2) for i in range(board.size)) + '\n')
     for r in range(board.size):
@@ -111,7 +112,7 @@ def send_own_board(wfile, board):
     wfile.flush()
 
 def setup_player_board(player):
-    # Prompt the player to place ships manually or randomly
+    # Ask the player whether to place ships manually or randomly
     wfile = player['wfile']
     rfile = player['rfile']
     wfile.write("Place ships manually (M) or randomly (R)? [M/R]:\n")
