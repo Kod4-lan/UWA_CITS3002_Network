@@ -38,6 +38,10 @@ def run_two_player_game(p1, p2):
 
         line = current['rfile'].readline()
         if not line:
+            # Koda: Handle client disconnection
+            opponent['wfile'].write("MESSAGE Opponent disconnected\n")
+            opponent['wfile'].write("RESULT WIN\n")
+            opponent['wfile'].flush()
             break
 
         line = line.strip()
