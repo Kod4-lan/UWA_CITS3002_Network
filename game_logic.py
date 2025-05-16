@@ -39,6 +39,8 @@ def run_two_player_game(p1, p2):
         line = current['rfile'].readline()
         if not line:
             # Koda: Handle client disconnection
+            # Koda: Check whether this was a proper 'quit' or unexpected disconnect
+            # If quit was sent, this section will not be reached
             opponent['wfile'].write("MESSAGE Opponent disconnected\n")
             opponent['wfile'].write("RESULT WIN\n")
             opponent['wfile'].flush()
@@ -46,11 +48,14 @@ def run_two_player_game(p1, p2):
 
         line = line.strip()
         if line.lower() == 'quit':
+            # Koda: Player voluntarily forfeits the game
             current['wfile'].write("RESULT FORFEIT\n")
-            opponent['wfile'].write("MESSAGE Opponent forfeited. You win!\nRESULT WIN\n")
+            opponent['wfile'].write("MESSAGE Opponent quit\n")
+            opponent['wfile'].write("RESULT WIN\n")
             current['wfile'].flush()
             opponent['wfile'].flush()
             break
+
 
         parts = line.split()
         if len(parts) != 2 or parts[0].upper() != "FIRE":
