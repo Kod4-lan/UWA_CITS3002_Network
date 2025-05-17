@@ -69,21 +69,21 @@ def run_two_player_game(p1, p2):
 
             if result == 'hit':
                 if sunk:
-                    current['wfile'].write(f"RESULT HIT {sunk.upper()}\n")
+                    current['wfile'].write(f"RESULT HIT! {sunk.upper()}\n")
                 else:
                     current['wfile'].write("RESULT HIT\n")
             elif result == 'miss':
                 current['wfile'].write("RESULT MISS\n")
             elif result == 'already_shot':
-                current['wfile'].write("RESULT ALREADY\n")
+                current['wfile'].write("RESULT HIT ALREADY\n")
             current['wfile'].flush()
 
             # Show updated board after the move
             send_board(current['wfile'], opponent['board'])
 
             if opponent['board'].all_ships_sunk():
-                current['wfile'].write("RESULT WIN\n")
-                opponent['wfile'].write("RESULT LOSE\n")
+                current['wfile'].write("RESULT YOU WIN\n")
+                opponent['wfile'].write("RESULT YOU LOSE\n")
                 current['wfile'].flush()
                 opponent['wfile'].flush()
                 break
