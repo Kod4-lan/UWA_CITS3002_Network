@@ -97,8 +97,14 @@ def run_two_player_game(p1, p2):
             send_board(current['wfile'], opponent['board'])
             turn = 1 - turn
 
-        except Exception as e:
+        except Exception:
             current['wfile'].write("RESULT INVALID\n")
+            current['wfile'].write("MESSAGE Invalid coordinate format. Use A1–J10.\n")
+            current['wfile'].flush()
+            continue
+        if not (0 <= row < 10 and 0 <= col < 10):
+            current['wfile'].write("RESULT INVALID\n")
+            current['wfile'].write("MESSAGE Coordinate out of bounds. Use A1–J10.\n")
             current['wfile'].flush()
             continue
 
