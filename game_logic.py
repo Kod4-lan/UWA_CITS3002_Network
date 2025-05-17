@@ -9,8 +9,14 @@ def run_two_player_game(p1, p2):
     p2['wfile'].flush()
 
     # Ship placement
-    setup_player_board(p1)
-    setup_player_board(p2)
+    if not setup_player_board(p1, p2):
+        p1['conn'].close()
+        p2['conn'].close()
+        return
+    if not setup_player_board(p2, p1):
+        p1['conn'].close()
+        p2['conn'].close()
+        return
 
     # Send boards
     send_own_board(p1['wfile'], p1['board'])
@@ -144,51 +150,80 @@ def send_own_board(wfile, board):
     wfile.write('\n')
     wfile.flush()
 
-def setup_player_board(player):
-    # Ask the player whether to place ships manually or randomly
-    wfile = player['wfile']
-    rfile = player['rfile']
-    wfile.write("Place ships manually (M) or randomly (R)? [M/R]:\n")
-    wfile.flush()
-    choice = rfile.readline().strip().upper()
-
-    board = Board()
-    if choice == 'M':
-        for ship_name, ship_size in SHIPS:
-            while True:
-                wfile.write(f"Placing {ship_name} (size {ship_size})\n")
-                wfile.write("Enter starting coordinate (e.g. A1):\n")
-                wfile.flush()
-                coord_str = rfile.readline().strip()
-
-                wfile.write("Orientation? Enter 'H' or 'V':\n")
-                wfile.flush()
-                orientation_str = rfile.readline().strip().upper()
-
-                try:
-                    row, col = parse_coordinate(coord_str)
-                    orientation = 0 if orientation_str == 'H' else 1 if orientation_str == 'V' else -1
-                    if orientation == -1:
-                        wfile.write("Invalid orientation. Please enter H or V.\n")
-                        wfile.flush()
-                        continue
-
-                    if board.can_place_ship(row, col, ship_size, orientation):
-                        positions = board.do_place_ship(row, col, ship_size, orientation)
-                        board.placed_ships.append({
-                            'name': ship_name,
-                            'positions': positions
-                        })
-                        break
-                    else:
-                        wfile.write("Invalid position. Try again.\n")
-                        wfile.flush()
-                except Exception as e:
-                    wfile.write(f"Error: {e}\n")
-                    wfile.flush()
-    else:
-        board.place_ships_randomly(SHIPS)
-        wfile.write("Ships placed randomly.\n")
+def setup_player_board(player, opponent):
+    try:
+        wfile = player['wfile']
+        rfile = player['rfile']
+        wfile.write("Place ships manually (M) or randomly (R)? [M/R]:\n")
         wfile.flush()
 
-    player['board'] = board
+        choice_line = rfile.readline()
+        if not choice_line:
+            opponent['wfile'].write("MESSAGE Opponent disconnected during setup\n")
+            opponent['wfile'].write("RESULT WIN\n")
+            opponent['wfile'].flush()
+            return False
+
+        choice = choice_line.strip().upper()
+        board = Board()
+
+        if choice == 'M':
+            for ship_name, ship_size in SHIPS:
+                while True:
+                    wfile.write(f"Placing {ship_name} (size {ship_size})\n")
+                    wfile.write("Enter starting coordinate (e.g. A1):\n")
+                    wfile.flush()
+
+                    coord_line = rfile.readline()
+                    if not coord_line:
+                        opponent['wfile'].write("MESSAGE Opponent disconnected during setup\n")
+                        opponent['wfile'].write("RESULT WIN\n")
+                        opponent['wfile'].flush()
+                        return False
+
+                    coord_str = coord_line.strip()
+                    wfile.write("Orientation? Enter 'H' or 'V':\n")
+                    wfile.flush()
+
+                    orient_line = rfile.readline()
+                    if not orient_line:
+                        opponent['wfile'].write("MESSAGE Opponent disconnected during setup\n")
+                        opponent['wfile'].write("RESULT WIN\n")
+                        opponent['wfile'].flush()
+                        return False
+
+                    orientation_str = orient_line.strip().upper()
+                    try:
+                        row, col = parse_coordinate(coord_str)
+                        orientation = 0 if orientation_str == 'H' else 1 if orientation_str == 'V' else -1
+                        if orientation == -1:
+                            wfile.write("Invalid orientation. Please enter H or V.\n")
+                            wfile.flush()
+                            continue
+
+                        if board.can_place_ship(row, col, ship_size, orientation):
+                            positions = board.do_place_ship(row, col, ship_size, orientation)
+                            board.placed_ships.append({
+                                'name': ship_name,
+                                'positions': positions
+                            })
+                            break
+                        else:
+                            wfile.write("Invalid position. Try again.\n")
+                            wfile.flush()
+                    except Exception as e:
+                        wfile.write(f"Error: {e}\n")
+                        wfile.flush()
+        else:
+            board.place_ships_randomly(SHIPS)
+            wfile.write("Ships placed randomly.\n")
+            wfile.flush()
+
+        player['board'] = board
+        return True
+
+    except Exception:
+        opponent['wfile'].write("MESSAGE Opponent disconnected during setup\n")
+        opponent['wfile'].write("RESULT WIN\n")
+        opponent['wfile'].flush()
+        return False
