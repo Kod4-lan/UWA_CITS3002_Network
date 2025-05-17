@@ -70,6 +70,19 @@ def run_two_player_game(p1, p2):
 
         try:
             row, col = parse_coordinate(parts[1])
+        except Exception:
+            current['wfile'].write("RESULT INVALID\n")
+            current['wfile'].write("MESSAGE Invalid coordinate format. Use A1–J10.\n")
+            current['wfile'].flush()
+            continue
+
+        if not (0 <= row < 10 and 0 <= col < 10):
+            current['wfile'].write("RESULT INVALID\n")
+            current['wfile'].write("MESSAGE Coordinate out of bounds. Use A1–J10.\n")
+            current['wfile'].flush()
+            continue
+
+        try:
             result, sunk = opponent['board'].fire_at(row, col)
 
             if result == 'hit':
@@ -99,14 +112,10 @@ def run_two_player_game(p1, p2):
 
         except Exception:
             current['wfile'].write("RESULT INVALID\n")
-            current['wfile'].write("MESSAGE Invalid coordinate format. Use A1–J10.\n")
+            current['wfile'].write("MESSAGE Unexpected internal error.\n")
             current['wfile'].flush()
             continue
-        if not (0 <= row < 10 and 0 <= col < 10):
-            current['wfile'].write("RESULT INVALID\n")
-            current['wfile'].write("MESSAGE Coordinate out of bounds. Use A1–J10.\n")
-            current['wfile'].flush()
-            continue
+
 
     # Close both sockets after game ends
     p1['conn'].close()
