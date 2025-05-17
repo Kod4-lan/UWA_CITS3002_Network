@@ -1,7 +1,37 @@
 from battleship import Board, parse_coordinate, SHIPS
 import threading
 
-def run_two_player_game(p1, p2):
+def run_two_player_session(p1, p2):
+    while True:
+        success = run_single_game(p1, p2)
+        if not success:
+            break
+
+        p1['wfile'].write("MESSAGE Waiting for the other player to decide...\n")
+        p2['wfile'].write("MESSAGE Waiting for the other player to decide...\n")
+        p1['wfile'].flush()
+        p2['wfile'].flush()
+
+        again1 = ask_play_again(p1)
+
+        if not again1:
+            p2['wfile'].write("MESSAGE Opponent declined to continue. Game session ended.\n")
+            p2['wfile'].write("MESSAGE Session ended.\n")
+            p2['wfile'].flush()
+            break
+
+        again2 = ask_play_again(p2)
+
+        if not again2:
+            p1['wfile'].write("MESSAGE Opponent declined to continue. Game session ended.\n")
+            p1['wfile'].write("MESSAGE Session ended.\n")
+            p1['wfile'].flush()
+            break
+
+    p1['conn'].close()
+    p2['conn'].close()
+
+def run_single_game(p1, p2):
     # Notify both players the game is starting
     p1['wfile'].write("Both players connected! Game will start soon...\n")
     p2['wfile'].write("Both players connected! Game will start soon...\n")
@@ -12,11 +42,11 @@ def run_two_player_game(p1, p2):
     if not setup_player_board(p1, p2):
         p1['conn'].close()
         p2['conn'].close()
-        return
+        return False
     if not setup_player_board(p2, p1):
         p1['conn'].close()
         p2['conn'].close()
-        return
+        return False
 
     # Send boards
     send_own_board(p1['wfile'], p1['board'])
@@ -66,7 +96,7 @@ def run_two_player_game(p1, p2):
             opponent['wfile'].write("RESULT WIN\n")
             current['wfile'].flush()
             opponent['wfile'].flush()
-            break
+            return False
 
         parts = line.split()
         if len(parts) != 2 or parts[0].upper() != "FIRE":
@@ -101,7 +131,7 @@ def run_two_player_game(p1, p2):
                     opponent['wfile'].write("RESULT LOSE\n")
                     current['wfile'].flush()
                     opponent['wfile'].flush()
-                    break
+                    return True
                 else:
                     if sunk:
                         current['wfile'].write(f"RESULT HIT {sunk.upper()}\n")
@@ -121,11 +151,6 @@ def run_two_player_game(p1, p2):
             current['wfile'].write("MESSAGE Unexpected internal error.\n")
             current['wfile'].flush()
             continue
-
-
-    # Close both sockets after game ends
-    p1['conn'].close()
-    p2['conn'].close()
 
 
 def send_board(wfile, board):
@@ -227,3 +252,26 @@ def setup_player_board(player, opponent):
         opponent['wfile'].write("RESULT WIN\n")
         opponent['wfile'].flush()
         return False
+
+def ask_play_again(player):
+    wfile = player['wfile']
+    rfile = player['rfile']
+
+    for _ in range(3):# Try up to 3 times
+        wfile.write("MESSAGE Play again? (Y/N)\n")
+        wfile.flush()
+
+        response = rfile.readline()
+        if not response:
+            return False
+
+        response = response.strip().upper()
+        if response == 'Y':
+            return True
+        elif response == 'N':
+            return False
+        else:
+            wfile.write("MESSAGE Invalid response. Please enter Y or N.\n")
+            wfile.flush()
+
+    return False
