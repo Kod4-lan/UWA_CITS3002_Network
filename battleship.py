@@ -231,17 +231,23 @@ class Board:
 def parse_coordinate(coord_str):
     """
     Convert something like 'B5' into zero-based (row, col).
-    Example: 'A1' => (0, 0), 'C10' => (2, 9)
-    HINT: you might want to add additional input validation here...
+    Raises ValueError on invalid format or out-of-bounds.
     """
     coord_str = coord_str.strip().upper()
+    if len(coord_str) < 2 or not coord_str[0].isalpha() or not coord_str[1:].isdigit():
+        raise ValueError("Invalid coordinate format")
+
     row_letter = coord_str[0]
     col_digits = coord_str[1:]
 
     row = ord(row_letter) - ord('A')
     col = int(col_digits) - 1  # zero-based
 
+    if row < 0 or row >= 10 or col < 0 or col >= 10:
+        raise ValueError("Coordinates out of bounds")
+
     return (row, col)
+
 
 
 def run_single_player_game_locally():
