@@ -34,6 +34,7 @@ def receive_messages(rfile):
             break
         line = line.strip()
 
+        # Recognized multi-line block: opponent board
         if line == "GRID":
             print("\n[Board]")
             while True:
@@ -41,8 +42,22 @@ def receive_messages(rfile):
                 if not board_line or board_line.strip() == "":
                     break
                 print(board_line.strip())
+
+        # Recognized multi-line block: self board
+        elif line == "GRID_SELF":
+            print("\n[Your Board]")
+            while True:
+                board_line = rfile.readline()
+                if not board_line or board_line.strip() == "":
+                    break
+                print(board_line.strip())
+
+        # All valid single-line structured messages
         else:
-            print(line)
+            # Print all non-empty lines
+            if line != "":
+                print(line)
+
 
 def main():
     global running
