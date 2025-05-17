@@ -38,9 +38,7 @@ def run_two_player_game(p1, p2):
 
         line = current['rfile'].readline()
         if not line:
-            # Koda: Handle client disconnection
-            # Koda: Check whether this was a proper 'quit' or unexpected disconnect
-            # If quit was sent, this section will not be reached
+            # Handle client disconnection
             opponent['wfile'].write("MESSAGE Opponent disconnected\n")
             opponent['wfile'].write("RESULT WIN\n")
             opponent['wfile'].flush()
@@ -48,7 +46,7 @@ def run_two_player_game(p1, p2):
 
         line = line.strip()
         if line.lower() == 'quit':
-            # Koda: Player voluntarily forfeits the game
+            # Player voluntarily forfeits
             current['wfile'].write("RESULT FORFEIT\n")
             opponent['wfile'].write("MESSAGE Opponent quit\n")
             opponent['wfile'].write("RESULT WIN\n")
@@ -56,15 +54,20 @@ def run_two_player_game(p1, p2):
             opponent['wfile'].flush()
             break
 
-
         parts = line.split()
-        if len(parts) != 2 or parts[0].upper() != "FIRE":
-            current['wfile'].write("RESULT INVALID INPUT (eg.Use FIRE B2)\n")
+        if len(parts) != 2:
+            current['wfile'].write("RESULT INVALID FORMAT (Use: FIRE B5)\n")
+            current['wfile'].flush()
+            continue
+
+        if parts[0].upper() != "FIRE":
+            current['wfile'].write("RESULT INVALID COMMAND (Only FIRE supported)\n")
             current['wfile'].flush()
             continue
 
         try:
             row, col = parse_coordinate(parts[1])
+
             result, sunk = opponent['board'].fire_at(row, col)
 
             if result == 'hit':
@@ -78,7 +81,6 @@ def run_two_player_game(p1, p2):
                 current['wfile'].write("RESULT HIT ALREADY\n")
             current['wfile'].flush()
 
-            # Show updated board after the move
             send_board(current['wfile'], opponent['board'])
 
             if opponent['board'].all_ships_sunk():
@@ -90,8 +92,13 @@ def run_two_player_game(p1, p2):
 
             turn = 1 - turn
 
+        except ValueError as ve:
+            current['wfile'].write(f"RESULT INVALID COORD ({ve})\n")
+            current['wfile'].flush()
+            continue
+
         except Exception as e:
-            current['wfile'].write(f"RESULT INVALID\n")
+            current['wfile'].write("RESULT ERROR\n")
             current['wfile'].flush()
             continue
 
@@ -99,7 +106,6 @@ def run_two_player_game(p1, p2):
     p2['conn'].close()
 
 def send_board(wfile, board):
-    # Send the opponent's board view to the player (only hits and misses are visible)
     wfile.write("GRID\n")
     wfile.write("  " + " ".join(str(i + 1).rjust(2) for i in range(board.size)) + '\n')
     for r in range(board.size):
@@ -110,7 +116,6 @@ def send_board(wfile, board):
     wfile.flush()
 
 def send_own_board(wfile, board):
-    # Send the player's full board including ship positions
     wfile.write("GRID_SELF\n")
     wfile.write("  " + " ".join(str(i + 1).rjust(2) for i in range(board.size)) + '\n')
     for r in range(board.size):
@@ -121,7 +126,6 @@ def send_own_board(wfile, board):
     wfile.flush()
 
 def setup_player_board(player):
-    # Ask the player whether to place ships manually or randomly
     wfile = player['wfile']
     rfile = player['rfile']
     wfile.write("Place ships manually (M) or randomly (R)? [M/R]:\n")
