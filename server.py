@@ -19,44 +19,73 @@ from game_logic import run_two_player_game
 HOST = '127.0.0.1'
 PORT = 5000
 
-clients = []  # [(conn, addr, rfile, wfile)]
+# Queue to store players who want to play again
+waiting_players = []
 
-def handle_client(player_id, conn, addr, rfile, wfile, start_event):
-    # Koda: Waiting for the client to send a command
-    wfile.write(f"Welcome Player {player_id + 1}! Waiting for the other player to connect...\n")
-    wfile.flush()
-    start_event.wait()  # Koda: Block until both players are connected
-    wfile.flush() 
-    # Koda: Placeholder for the game logic  
+# Ask a player if they want to play another game
+def ask_play_again(player):
+    try:
+        player['wfile'].write("Game over. Play again? (yes/no):\n")
+        player['wfile'].flush()
+        response = player['rfile'].readline().strip().lower()
+        return response == 'yes'
+    except:
+        return False
 
+# Collect two active players, using old players first, then accepting new ones
+def collect_two_players(server_sock):
+    global waiting_players
+    players = []
 
+    # Use remaining players who chose to play again
+    while waiting_players and len(players) < 2:
+        p = waiting_players.pop(0)
+        players.append(p)
+
+    # Accept new players to complete the pair
+    while len(players) < 2:
+        conn, addr = server_sock.accept()
+        print(f"[INFO] New player connected from {addr}")
+        rfile = conn.makefile('r')
+        wfile = conn.makefile('w')
+        wfile.write(f"Welcome Player! Waiting for others to join...\n")
+        wfile.flush()
+        players.append({"conn": conn, "rfile": rfile, "wfile": wfile})
+
+    return players
+
+# Main server loop
 def main():
     print(f"[INFO] Server listening on {HOST}:{PORT}")
     with socket.socket(socket.AF_INET, socket.SOCK_STREAM) as server_sock:
         server_sock.bind((HOST, PORT))
-        server_sock.listen(2)
+        server_sock.listen()
 
-        start_event = threading.Event()
+        while True:
+            print("[INFO] Waiting for 2 players to start a new game...")
+            p1, p2 = collect_two_players(server_sock)
 
-        for player_id in range(2):
-            conn, addr = server_sock.accept()
-            print(f"[INFO] Player {player_id + 1} connected from {addr}")
-            rfile = conn.makefile('r')
-            wfile = conn.makefile('w')
-            clients.append((conn, addr, rfile, wfile))
+            print("[INFO] Starting new game with 2 players.")
+            run_two_player_game(p1, p2)
 
-            thread = threading.Thread(
-                target=handle_client,
-                args=(player_id, conn, addr, rfile, wfile, start_event),
-                daemon=True
-            )
-            thread.start()
-        # Koda: Wait for both players to connect
-        print("[INFO] Both players connected. Game can begin.")
-        start_event.set()
-        p1 = {"conn": clients[0][0], "rfile": clients[0][2], "wfile": clients[0][3]}
-        p2 = {"conn": clients[1][0], "rfile": clients[1][2], "wfile": clients[1][3]}
-        run_two_player_game(p1, p2)
+            # Ask players if they want to continue after the game ends
+            again1 = ask_play_again(p1)
+            again2 = ask_play_again(p2)
+
+            if again1:
+                waiting_players.append(p1)
+            else:
+                try: p1['conn'].close()
+                except: pass
+
+            if again2:
+                waiting_players.append(p2)
+            else:
+                try: p2['conn'].close()
+                except: pass
+
+            print("[INFO] Game finished. Preparing next match...")
+
 
 # HINT: For multiple clients, you'd need to:
 # 1. Accept connections in a loop
