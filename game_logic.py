@@ -2,21 +2,21 @@ from battleship import Board, parse_coordinate, SHIPS
 import threading
 
 def run_two_player_game(p1, p2):
-    # Notify both players before ship placement
+    # Notify both players the game is starting
     p1['wfile'].write("Both players connected! Game will start soon...\n")
     p2['wfile'].write("Both players connected! Game will start soon...\n")
     p1['wfile'].flush()
     p2['wfile'].flush()
 
-    # Initialize player boards with M/R placement
+    # Ship placement
     setup_player_board(p1)
     setup_player_board(p2)
 
-    # Send each player their full own board
+    # Send boards
     send_own_board(p1['wfile'], p1['board'])
     send_own_board(p2['wfile'], p2['board'])
 
-    # Start game
+    # Game intro
     p1['wfile'].write("Game started! You are Player 1.\n")
     p2['wfile'].write("Game started! You are Player 2.\n")
     p1['wfile'].write("You go first.\n")
@@ -31,24 +31,30 @@ def run_two_player_game(p1, p2):
         current = players[turn]
         opponent = players[1 - turn]
 
-        # Show opponent board before each turn
+        # Show opponent board
         send_board(current['wfile'], opponent['board'])
         current['wfile'].write("Your turn! Enter command (e.g. FIRE B5):\n")
         current['wfile'].flush()
 
-        line = current['rfile'].readline()
-        if not line:
-            # Koda: Handle client disconnection
-            # Koda: Check whether this was a proper 'quit' or unexpected disconnect
-            # If quit was sent, this section will not be reached
-            opponent['wfile'].write("MESSAGE Opponent disconnected\n")
+        try:
+            line = current['rfile'].readline()
+            if not line:
+                # Graceful disconnect
+                opponent['wfile'].write("MESSAGE Opponent disconnected\n")
+                opponent['wfile'].write("RESULT WIN\n")
+                opponent['wfile'].flush()
+                break
+        except Exception:
+            # Force disconnect / socket closed
+            opponent['wfile'].write("MESSAGE Opponent disconnected unexpectedly\n")
             opponent['wfile'].write("RESULT WIN\n")
             opponent['wfile'].flush()
             break
 
         line = line.strip()
+
         if line.lower() == 'quit':
-            # Koda: Player voluntarily forfeits the game
+            # Player voluntarily quits
             current['wfile'].write("RESULT FORFEIT\n")
             opponent['wfile'].write("MESSAGE Opponent quit\n")
             opponent['wfile'].write("RESULT WIN\n")
@@ -56,10 +62,9 @@ def run_two_player_game(p1, p2):
             opponent['wfile'].flush()
             break
 
-
         parts = line.split()
         if len(parts) != 2 or parts[0].upper() != "FIRE":
-            current['wfile'].write("RESULT INVALID INPUT (eg.Use FIRE B2)\n")
+            current['wfile'].write("RESULT INVALID INPUT (e.g. FIRE B2)\n")
             current['wfile'].flush()
             continue
 
@@ -68,35 +73,39 @@ def run_two_player_game(p1, p2):
             result, sunk = opponent['board'].fire_at(row, col)
 
             if result == 'hit':
-                if sunk:
-                    current['wfile'].write(f"RESULT HIT! {sunk.upper()}\n")
+                if opponent['board'].all_ships_sunk():
+                    if sunk:
+                        current['wfile'].write(f"RESULT HIT {sunk.upper()}\n")
+                    else:
+                        current['wfile'].write("RESULT HIT\n")
+                    current['wfile'].write("RESULT WIN\n")
+                    opponent['wfile'].write("RESULT LOSE\n")
+                    current['wfile'].flush()
+                    opponent['wfile'].flush()
+                    break
                 else:
-                    current['wfile'].write("RESULT HIT\n")
+                    if sunk:
+                        current['wfile'].write(f"RESULT HIT {sunk.upper()}\n")
+                    else:
+                        current['wfile'].write("RESULT HIT\n")
             elif result == 'miss':
                 current['wfile'].write("RESULT MISS\n")
             elif result == 'already_shot':
-                current['wfile'].write("RESULT HIT ALREADY\n")
+                current['wfile'].write("RESULT ALREADY\n")
             current['wfile'].flush()
 
-            # Show updated board after the move
             send_board(current['wfile'], opponent['board'])
-
-            if opponent['board'].all_ships_sunk():
-                current['wfile'].write("RESULT YOU WIN\n")
-                opponent['wfile'].write("RESULT YOU LOSE\n")
-                current['wfile'].flush()
-                opponent['wfile'].flush()
-                break
-
             turn = 1 - turn
 
         except Exception as e:
-            current['wfile'].write(f"RESULT INVALID\n")
+            current['wfile'].write("RESULT INVALID\n")
             current['wfile'].flush()
             continue
 
+    # Close both sockets after game ends
     p1['conn'].close()
     p2['conn'].close()
+
 
 def send_board(wfile, board):
     # Send the opponent's board view to the player (only hits and misses are visible)
