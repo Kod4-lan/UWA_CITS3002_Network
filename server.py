@@ -96,26 +96,75 @@ def client_listener(server_sock):
 
 def game_matchmaker():
     while True:
-        if len(ready_queue) >= 2:
-            if active_game_lock.locked():
-                time.sleep(1)
-                continue
-            try:
-                p1 = ready_queue.popleft()
-                p2 = ready_queue.popleft()
+        # make sure at least 2 players are in the queue
+        if len(ready_queue) >= 2 and not active_game_lock.locked():
+            p1 = ready_queue.popleft()
+            p2 = ready_queue.popleft()
 
-                active_game_lock.acquire()
-                print("[INFO] Starting a new game...")
-                
+            # unpack for identification
+            conn1, rfile1, wfile1, player1_id = p1
+            conn2, rfile2, wfile2, player2_id = p2
 
-                t = threading.Thread(
-                    target=start_game_session_with_unlock,
-                    args=(p1, p2, spectators),
-                    daemon=True
-                )
-                t.start()
-            except IndexError:
-                time.sleep(1)
+            print("[INFO] Starting a new game...")
+            print(f"[DEBUG] p1: {p1}")
+            print(f"[DEBUG] p2: {p2}")
+
+            # Launch a new thread for the game session
+            def start():
+                with active_game_lock:
+                    survivor = run_two_player_session(
+                        {"conn": conn1, "rfile": rfile1, "wfile": wfile1, "player_id": player1_id},
+                        {"conn": conn2, "rfile": rfile2, "wfile": wfile2, "player_id": player2_id},
+                        spectators
+                    )
+
+                    # Arrange survivor and spectators
+                    if survivor:
+                        try:
+                            survivor['wfile'].write("MESSAGE Waiting for a new opponent...\n")
+                            survivor['wfile'].flush()
+                        except:
+                            print("[WARN] Could not notify survivor.")
+                        ready_queue.append((
+                            survivor['conn'],
+                            survivor['rfile'],
+                            survivor['wfile'],
+                            survivor['player_id']
+                        ))
+
+                    # switch spectators to players
+                    while len(ready_queue) < 2 and spectators:
+                        new_conn, new_rfile, new_wfile = spectators.pop(0)
+                        try:
+                            new_wfile.write("MESSAGE You are being promoted to a player. Send your ID again.\n")
+                            new_wfile.write("SEND-ID\n")
+                            new_wfile.flush()
+
+                            id_line = new_rfile.readline()
+                            if id_line.startswith("ID "):
+                                new_id = id_line.strip().split(" ", 1)[1]
+                                print(f"[INFO] Promoted spectator with ID: {new_id}")
+                                player_session[new_id] = {
+                                    'conn': new_conn,
+                                    'rfile': new_rfile,
+                                    'wfile': new_wfile,
+                                    'status': 'connected',
+                                    'last_seen': time.time()
+                                }
+                                ready_queue.append((new_conn, new_rfile, new_wfile, new_id))
+                            else:
+                                print("[WARN] Spectator failed to send ID.")
+
+                        except Exception as e:
+                            print(f"[ERROR] Failed to promote spectator: {e}")
+
+                    print("[INFO] Game session cleaned up.")
+                    print("[INFO] Game finished. Lock released.")
+
+            threading.Thread(target=start, daemon=True).start()
+
+        time.sleep(1)
+
 
 def start_game_session_with_unlock(p1_raw, p2_raw, spectators):
     try:
