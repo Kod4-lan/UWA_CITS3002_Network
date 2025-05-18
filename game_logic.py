@@ -48,10 +48,18 @@ def run_two_player_session(p1, p2):
 
 
 def safe_readline_with_timeout(rfile, timeout_seconds):
-    ready, _, _ = select.select([rfile], [], [], timeout_seconds)
-    if ready:
-        return rfile.readline()
-    return None  # timeout occurred
+    try:
+        ready, _, _ = select.select([rfile], [], [], timeout_seconds)
+        if ready:
+            line = rfile.readline()
+            if line == '':
+                return "closed", None  # socket closed
+            return "ok", line
+        return "timeout", None
+    except Exception:
+        return "closed", None
+
+
 
 def run_single_game(p1, p2):
     players = [p1, p2]
@@ -92,16 +100,22 @@ def run_single_game(p1, p2):
         current['wfile'].flush()
 
         try:
-            line = safe_readline_with_timeout(current['rfile'], 30)
+            status, line = safe_readline_with_timeout(current['rfile'], 30)
 
-            if line is None or line.strip() == '':
-                # Skip the turn if no input is received within the timeout
+            if status == "closed":
+                opponent['wfile'].write("MESSAGE Opponent disconnected unexpectedly\n")
+                opponent['wfile'].write("RESULT WIN\n")
+                opponent['wfile'].flush()
+                return False
+
+            elif status == "timeout":
                 current['wfile'].write("MESSAGE Timeout occurred. Your turn was skipped.\n")
                 current['wfile'].flush()
                 opponent['wfile'].write("MESSAGE Opponent timed out. Their turn was skipped.\n")
                 opponent['wfile'].flush()
                 turn = 1 - turn
                 continue
+
 
             line = line.strip()
 
@@ -197,8 +211,8 @@ def setup_player_board(player, opponent):
         wfile.write("Place ships manually (M) or randomly (R)? [M/R]  (timeout in 15s):\n")
         wfile.flush()
 
-        choice_line = safe_readline_with_timeout(rfile, 15)
-        if not choice_line:
+        status, choice_line = safe_readline_with_timeout(rfile, 15)
+        if status != "ok":
             opponent['wfile'].write("MESSAGE Opponent disconnected during setup (timeout or quit)\n")
             opponent['wfile'].write("RESULT WIN\n")
             opponent['wfile'].flush()
@@ -213,8 +227,8 @@ def setup_player_board(player, opponent):
                     wfile.write("Enter starting coordinate (e.g. A1):\n")
                     wfile.flush()
 
-                    coord_line = safe_readline_with_timeout(rfile, 30)
-                    if not coord_line:
+                    status, coord_line = safe_readline_with_timeout(rfile, 30)
+                    if status != "ok":
                         opponent['wfile'].write("MESSAGE Opponent disconnected during setup\n")
                         opponent['wfile'].write("RESULT WIN\n")
                         opponent['wfile'].flush()
@@ -224,8 +238,8 @@ def setup_player_board(player, opponent):
                     wfile.write("Orientation? Enter 'H' or 'V':\n")
                     wfile.flush()
 
-                    orient_line = safe_readline_with_timeout(rfile, 30)
-                    if not orient_line:
+                    status, orient_line = safe_readline_with_timeout(rfile, 30)
+                    if status != "ok":
                         opponent['wfile'].write("MESSAGE Opponent disconnected during setup\n")
                         opponent['wfile'].write("RESULT WIN\n")
                         opponent['wfile'].flush()
@@ -275,8 +289,8 @@ def ask_play_again(player):
         wfile.write("MESSAGE Play again? (Y/N)\n")
         wfile.flush()
 
-        response = rfile.readline()
-        if not response:
+        status, response = safe_readline_with_timeout(rfile, 15)
+        if status != "ok":
             return False
 
         response = response.strip().upper()
