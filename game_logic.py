@@ -1,5 +1,6 @@
 from battleship import Board, parse_coordinate, SHIPS
-import threading
+import select
+
 
 def run_two_player_session(p1, p2):
     while True:
@@ -13,7 +14,6 @@ def run_two_player_session(p1, p2):
         p2['wfile'].flush()
 
         again1 = ask_play_again(p1)
-
         if not again1:
             p2['wfile'].write("MESSAGE Opponent declined to continue. Game session ended.\n")
             p2['wfile'].write("MESSAGE Session ended.\n")
@@ -21,7 +21,6 @@ def run_two_player_session(p1, p2):
             break
 
         again2 = ask_play_again(p2)
-
         if not again2:
             p1['wfile'].write("MESSAGE Opponent declined to continue. Game session ended.\n")
             p1['wfile'].write("MESSAGE Session ended.\n")
@@ -31,28 +30,36 @@ def run_two_player_session(p1, p2):
     p1['conn'].close()
     p2['conn'].close()
 
+
+def safe_readline_with_timeout(rfile, timeout_seconds):
+    ready, _, _ = select.select([rfile], [], [], timeout_seconds)
+    if ready:
+        return rfile.readline()
+    return None  # timeout occurred
+
 def run_single_game(p1, p2):
-    # Notify both players the game is starting
-    p1['wfile'].write("Both players connected! Game will start soon...\n")
-    p2['wfile'].write("Both players connected! Game will start soon...\n")
+    players = [p1, p2]
+    turn = 0
+
+    p1['wfile'].write("MESSAGE Both players connected! Now set up your ships.\n")
+    p2['wfile'].write("MESSAGE Both players connected! Now waiting p1 place ships.\n")
     p1['wfile'].flush()
     p2['wfile'].flush()
 
-    # Ship placement
+
     if not setup_player_board(p1, p2):
         p1['conn'].close()
         p2['conn'].close()
         return False
+
     if not setup_player_board(p2, p1):
         p1['conn'].close()
         p2['conn'].close()
         return False
 
-    # Send boards
     send_own_board(p1['wfile'], p1['board'])
     send_own_board(p2['wfile'], p2['board'])
 
-    # Game intro
     p1['wfile'].write("Game started! You are Player 1.\n")
     p2['wfile'].write("Game started! You are Player 2.\n")
     p1['wfile'].write("You go first.\n")
@@ -60,65 +67,55 @@ def run_single_game(p1, p2):
     p1['wfile'].flush()
     p2['wfile'].flush()
 
-    players = [p1, p2]
-    turn = 0
-
     while True:
         current = players[turn]
         opponent = players[1 - turn]
 
-        # Show opponent board
         send_board(current['wfile'], opponent['board'])
         current['wfile'].write("Your turn! Enter command (e.g. FIRE B5):\n")
         current['wfile'].flush()
 
         try:
-            line = current['rfile'].readline()
-            if not line:
-                # Graceful disconnect
-                opponent['wfile'].write("MESSAGE Opponent disconnected\n")
-                opponent['wfile'].write("RESULT WIN\n")
+            line = safe_readline_with_timeout(current['rfile'], 7)
+            if line is None or line.strip() == '':
+                # Timeout or disconnect → skip turn instead of forfeit
+                current['wfile'].write("MESSAGE Timeout occurred. Your turn was skipped.\n")
+                current['wfile'].flush()
+                opponent['wfile'].write("MESSAGE Opponent timed out. Their turn was skipped.\n")
                 opponent['wfile'].flush()
-                break
-        except Exception:
-            # Force disconnect / socket closed
-            opponent['wfile'].write("MESSAGE Opponent disconnected unexpectedly\n")
-            opponent['wfile'].write("RESULT WIN\n")
-            opponent['wfile'].flush()
-            break
+                turn = 1 - turn
+                continue
 
-        line = line.strip()
+            line = line.strip()
 
-        if line.lower() == 'quit':
-            # Player voluntarily quits
-            current['wfile'].write("RESULT FORFEIT\n")
-            opponent['wfile'].write("MESSAGE Opponent quit\n")
-            opponent['wfile'].write("RESULT WIN\n")
-            current['wfile'].flush()
-            opponent['wfile'].flush()
-            return False
+            if line.lower() == 'quit':
+                current['wfile'].write("RESULT FORFEIT\n")
+                opponent['wfile'].write("MESSAGE Opponent quit\n")
+                opponent['wfile'].write("RESULT WIN\n")
+                current['wfile'].flush()
+                opponent['wfile'].flush()
+                return False
 
-        parts = line.split()
-        if len(parts) != 2 or parts[0].upper() != "FIRE":
-            current['wfile'].write("RESULT INVALID INPUT (e.g. FIRE B2)\n")
-            current['wfile'].flush()
-            continue
+            parts = line.split()
+            if len(parts) != 2 or parts[0].upper() != "FIRE":
+                current['wfile'].write("RESULT INVALID INPUT (e.g. FIRE B2)\n")
+                current['wfile'].flush()
+                continue
 
-        try:
-            row, col = parse_coordinate(parts[1])
-        except Exception:
-            current['wfile'].write("RESULT INVALID\n")
-            current['wfile'].write("MESSAGE Invalid coordinate format. Use A1–J10.\n")
-            current['wfile'].flush()
-            continue
+            try:
+                row, col = parse_coordinate(parts[1])
+            except Exception:
+                current['wfile'].write("RESULT INVALID\n")
+                current['wfile'].write("MESSAGE Invalid coordinate format. Use A1–J10.\n")
+                current['wfile'].flush()
+                continue
 
-        if not (0 <= row < 10 and 0 <= col < 10):
-            current['wfile'].write("RESULT INVALID\n")
-            current['wfile'].write("MESSAGE Coordinate out of bounds. Use A1–J10.\n")
-            current['wfile'].flush()
-            continue
+            if not (0 <= row < 10 and 0 <= col < 10):
+                current['wfile'].write("RESULT INVALID\n")
+                current['wfile'].write("MESSAGE Coordinate out of bounds. Use A1–J10.\n")
+                current['wfile'].flush()
+                continue
 
-        try:
             result, sunk = opponent['board'].fire_at(row, col)
 
             if result == 'hit':
@@ -257,7 +254,7 @@ def ask_play_again(player):
     wfile = player['wfile']
     rfile = player['rfile']
 
-    for _ in range(3):# Try up to 3 times
+    for _ in range(3):
         wfile.write("MESSAGE Play again? (Y/N)\n")
         wfile.flush()
 
