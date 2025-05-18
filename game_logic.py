@@ -207,7 +207,7 @@ def run_single_game(p1, p2, spectators, player_session):
 
                 if line.lower() == 'quit':
                     print(f"[INFO] Player {player_id} sent 'quit'. Treating as disconnect.")
-                    raise ConnectionResetError("Player quit")  # Simulate disconnect
+                    raise ConnectionResetError("Player quit")  #
 
 
                 if line.upper().startswith("FIRE"):

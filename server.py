@@ -106,6 +106,7 @@ def game_matchmaker():
 
                 active_game_lock.acquire()
                 print("[INFO] Starting a new game...")
+                
 
                 t = threading.Thread(
                     target=start_game_session_with_unlock,
