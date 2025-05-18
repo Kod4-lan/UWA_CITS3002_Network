@@ -172,6 +172,9 @@ def run_single_game(p1, p2, spectators, player_session):
 
                         for i in range(60):
                             session = player_session.get(player_id)
+                            if not check_alive(opponent, current):
+                                print("[INFO] Opponent also disconnected. Ending game.")
+                                return False
                             if session and session.get("status") == "reconnected":
                                 print(f"[INFO] Player {player_id} reconnected.")
 
@@ -200,7 +203,7 @@ def run_single_game(p1, p2, spectators, player_session):
                                 print(f"[INFO] Player {player_id} reconnected within 60s.")
                                 break  
 
-                            time.sleep(1)
+                            time.sleep(0.5)
                         else:
                             
                             opponent["wfile"].write("MESSAGE Opponent did not reconnect in time.\n")
