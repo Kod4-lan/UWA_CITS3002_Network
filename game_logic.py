@@ -206,12 +206,9 @@ def run_single_game(p1, p2, spectators, player_session):
                 line = line.strip()
 
                 if line.lower() == 'quit':
-                    current['wfile'].write("RESULT FORFEIT\n")
-                    opponent['wfile'].write("MESSAGE Opponent quit\n")
-                    opponent['wfile'].write("RESULT WIN\n")
-                    current['wfile'].flush()
-                    opponent['wfile'].flush()
-                    return False
+                    print(f"[INFO] Player {player_id} sent 'quit'. Treating as disconnect.")
+                    raise ConnectionResetError("Player quit")  # Simulate disconnect
+
 
                 if line.upper().startswith("FIRE"):
                     broadcast_to_spectators(spectators, f"Player {turn + 1} fired at {line.split()[1]}")

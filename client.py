@@ -101,13 +101,9 @@ def main():
                 if user_input.lower() == "quit":
                     wfile.write("quit\n")
                     wfile.flush()
-                    print("[INFO] Quitting game. Closing connection.")
+                    print("[INFO] You have quit the game. You can reconnect within 60s.")
                     running = False
-                    wfile.close()
-                    rfile.close()
-                    s.shutdown(socket.SHUT_RDWR)
-                    s.close()
-                    break
+                    break  
 
                 wfile.write(user_input + '\n')
                 wfile.flush()
