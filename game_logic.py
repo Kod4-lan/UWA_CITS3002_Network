@@ -59,7 +59,16 @@ def safe_readline_with_timeout(rfile, timeout_seconds):
     except Exception:
         return "closed", None
 
-
+def check_alive(p, opponent):
+    try:
+        p['wfile'].write("PING\n")
+        p['wfile'].flush()
+        return True
+    except:
+        opponent['wfile'].write("MESSAGE Opponent disconnected unexpectedly\n")
+        opponent['wfile'].write("RESULT WIN\n")
+        opponent['wfile'].flush()
+        return False
 
 def run_single_game(p1, p2):
     players = [p1, p2]
@@ -69,7 +78,6 @@ def run_single_game(p1, p2):
     p2['wfile'].write("MESSAGE Both players connected! Now waiting p1 place ships.\n")
     p1['wfile'].flush()
     p2['wfile'].flush()
-
 
     if not setup_player_board(p1, p2):
         p1['conn'].close()
@@ -91,7 +99,22 @@ def run_single_game(p1, p2):
     p1['wfile'].flush()
     p2['wfile'].flush()
 
+    def check_alive(p, opponent):
+        try:
+            p['wfile'].write("PING\n")
+            p['wfile'].flush()
+            return True
+        except:
+            opponent['wfile'].write("MESSAGE Opponent disconnected unexpectedly\n")
+            opponent['wfile'].write("RESULT WIN\n")
+            opponent['wfile'].flush()
+            return False
+
     while True:
+        # Check both players are alive before each turn
+        if not check_alive(players[0], players[1]) or not check_alive(players[1], players[0]):
+            return False
+
         current = players[turn]
         opponent = players[1 - turn]
 
@@ -115,7 +138,6 @@ def run_single_game(p1, p2):
                 opponent['wfile'].flush()
                 turn = 1 - turn
                 continue
-
 
             line = line.strip()
 
@@ -175,7 +197,6 @@ def run_single_game(p1, p2):
             turn = 1 - turn
 
         except Exception:
-            # socket error or other exception
             opponent['wfile'].write("MESSAGE Opponent disconnected unexpectedly\n")
             opponent['wfile'].write("RESULT WIN\n")
             opponent['wfile'].flush()
@@ -208,6 +229,11 @@ def setup_player_board(player, opponent):
     try:
         wfile = player['wfile']
         rfile = player['rfile']
+
+        # Check if player is alive before prompt
+        if not check_alive(player, opponent):
+            return False
+
         wfile.write("Place ships manually (M) or randomly (R)? [M/R]  (timeout in 15s):\n")
         wfile.flush()
 
@@ -223,6 +249,8 @@ def setup_player_board(player, opponent):
         if choice == 'M':
             for ship_name, ship_size in SHIPS:
                 while True:
+                    if not check_alive(player, opponent):
+                        return False
                     wfile.write(f"Placing {ship_name} (size {ship_size})\n")
                     wfile.write("Enter starting coordinate (e.g. A1):\n")
                     wfile.flush()

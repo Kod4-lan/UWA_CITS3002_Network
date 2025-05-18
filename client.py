@@ -90,6 +90,8 @@ def main():
 
                 user_input = input(">> ").strip()
                 if user_input.lower() == "quit":
+                    wfile.write("quit\n")
+                    wfile.flush()
                     print("[INFO] Quitting game. Closing connection.")
                     running = False
                     wfile.close()
