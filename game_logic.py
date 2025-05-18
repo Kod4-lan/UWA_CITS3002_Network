@@ -130,7 +130,15 @@ def run_single_game(p1, p2, spectators, player_session):
         send_own_board(p1['wfile'], p1['board'])
         send_own_board(p2['wfile'], p2['board'])
 
-        broadcast_to_spectators(spectators, "A new game has started between two players.")
+        player1_id = p1['player_id']
+        player2_id = p2['player_id']
+        for idx, (conn, rfile, wfile) in enumerate(spectators):
+            try:
+                wfile.write(f"MESSAGE [Spectator #{idx+1}] New game: {player1_id} vs {player2_id}\n")
+                wfile.flush()
+            except:
+                continue
+
         p1['wfile'].write("MESSAGE Both players have placed their ships. Game starting...\n")
         p2['wfile'].write("MESSAGE Both players have placed their ships. Game starting...\n")
         p1['wfile'].write("Game started! You are Player 1.\n")
