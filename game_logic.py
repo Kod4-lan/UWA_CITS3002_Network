@@ -29,18 +29,32 @@ def run_two_player_session(p1, p2, spectators, player_session):
         p2['wfile'].flush()
 
         again1 = ask_play_again(p1)
-        if not again1:
-            p2['wfile'].write("MESSAGE Opponent declined to continue. Game session ended.\n")
-            p2['wfile'].write("MESSAGE Session ended.\n")
-            p2['wfile'].flush()
-            break
-
         again2 = ask_play_again(p2)
-        if not again2:
-            p1['wfile'].write("MESSAGE Opponent declined to continue. Game session ended.\n")
+
+        if again1 and again2:
+            continue  # if both want to play again, continue the loop
+
+        # Define whcih player wants to continue
+        if again1 and not again2:
+            p1['wfile'].write("MESSAGE Opponent declined to continue. You will be returned to the waiting queue.\n")
             p1['wfile'].write("MESSAGE Session ended.\n")
             p1['wfile'].flush()
-            break
+            return p1  # Client 1 continues to play
+
+        elif again2 and not again1:
+            p2['wfile'].write("MESSAGE Opponent declined to continue. You will be returned to the waiting queue.\n")
+            p2['wfile'].write("MESSAGE Session ended.\n")
+            p2['wfile'].flush()
+            return p2  # Client 2 continues to play
+
+        else:
+            # Both want to quit
+            p1['wfile'].write("MESSAGE Both players declined. Session ended.\n")
+            p1['wfile'].flush()
+            p2['wfile'].write("MESSAGE Both players declined. Session ended.\n")
+            p2['wfile'].flush()
+            return None
+
 
     p1['conn'].close()
     p2['conn'].close()
