@@ -30,6 +30,22 @@ def run_two_player_session(p1, p2):
     p1['conn'].close()
     p2['conn'].close()
 
+    # Determine if the players are still connected
+    try:
+        p1['wfile'].write("PING\n")
+        p1['wfile'].flush()
+        return p1
+    except:
+        pass
+    try:
+        p2['wfile'].write("PING\n")
+        p2['wfile'].flush()
+        return p2
+    except:
+        pass
+    return None
+
+
 
 def safe_readline_with_timeout(rfile, timeout_seconds):
     ready, _, _ = select.select([rfile], [], [], timeout_seconds)
@@ -76,9 +92,10 @@ def run_single_game(p1, p2):
         current['wfile'].flush()
 
         try:
-            line = safe_readline_with_timeout(current['rfile'], 7)
+            line = safe_readline_with_timeout(current['rfile'], 30)
+
             if line is None or line.strip() == '':
-                # Timeout or disconnect → skip turn instead of forfeit
+                # Skip the turn if no input is received within the timeout
                 current['wfile'].write("MESSAGE Timeout occurred. Your turn was skipped.\n")
                 current['wfile'].flush()
                 opponent['wfile'].write("MESSAGE Opponent timed out. Their turn was skipped.\n")
@@ -144,10 +161,11 @@ def run_single_game(p1, p2):
             turn = 1 - turn
 
         except Exception:
-            current['wfile'].write("RESULT INVALID\n")
-            current['wfile'].write("MESSAGE Unexpected internal error.\n")
-            current['wfile'].flush()
-            continue
+            # socket error or other exception
+            opponent['wfile'].write("MESSAGE Opponent disconnected unexpectedly\n")
+            opponent['wfile'].write("RESULT WIN\n")
+            opponent['wfile'].flush()
+            return False
 
 
 def send_board(wfile, board):

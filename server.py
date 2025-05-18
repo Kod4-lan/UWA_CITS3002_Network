@@ -12,56 +12,71 @@ However, if you want to support multiple clients (i.e. progress through further 
 
 import socket
 import threading
-from battleship import run_single_player_game_online,Board, parse_coordinate, SHIPS
-from game_logic import run_single_game, run_two_player_session
-# Koda: Server code for a two-player Battleship game
+import queue
+from game_logic import run_two_player_session
 
 HOST = '127.0.0.1'
 PORT = 5000
 
-clients = []  # [(conn, addr, rfile, wfile)]
+# Queue to hold waiting clients
+waiting_clients = queue.Queue()
 
-def handle_client(player_id, conn, addr, rfile, wfile, start_event):
-    # Koda: Waiting for the client to send a command
-    wfile.write(f"Welcome Player {player_id + 1}! Waiting for the other player to connect...\n")
-    wfile.flush()
-    start_event.wait()  # Koda: Block until both players are connected
-    wfile.flush() 
-    # Koda: Placeholder for the game logic  
+def client_listener(server_sock):
+    # background thread, accept new clients and put them in the queue
+    while True:
+        conn, addr = server_sock.accept()
+        print(f"[INFO] New client from {addr}")
+        rfile = conn.makefile('r')
+        wfile = conn.makefile('w')
+        wfile.write("MESSAGE Connected to BEER server. Waiting for a match...\n")
+        wfile.flush()
+        waiting_clients.put((conn, rfile, wfile))
 
+def game_matchmaker():
+    # background thread, match clients from the queue
+    while True:
+        if waiting_clients.qsize() >= 2:
+            p1 = waiting_clients.get()
+            p2 = waiting_clients.get()
+            print("[INFO] Starting a new game...")
+            t = threading.Thread(
+                target=start_game_session,
+                args=(p1, p2),
+                daemon=True
+            )
+            t.start()
+
+def start_game_session(p1_raw, p2_raw):
+    conn1, rfile1, wfile1 = p1_raw
+    conn2, rfile2, wfile2 = p2_raw
+    p1 = {"conn": conn1, "rfile": rfile1, "wfile": wfile1}
+    p2 = {"conn": conn2, "rfile": rfile2, "wfile": wfile2}
+
+    try:
+        survivor = run_two_player_session(p1, p2)
+    except Exception as e:
+        print(f"[ERROR] Game session crashed: {e}")
+        survivor = None
+    finally:
+        print("[INFO] Game session cleaned up.")
+        if survivor:
+            try:
+                waiting_clients.put((survivor['conn'], survivor['rfile'], survivor['wfile']))
+                print("[INFO] Survivor returned to waiting queue.")
+            except Exception as e:
+                print(f"[WARN] Failed to requeue survivor: {e}")
 
 def main():
     print(f"[INFO] Server listening on {HOST}:{PORT}")
     with socket.socket(socket.AF_INET, socket.SOCK_STREAM) as server_sock:
+        server_sock.setsockopt(socket.SOL_SOCKET, socket.SO_REUSEADDR, 1)
         server_sock.bind((HOST, PORT))
-        server_sock.listen(2)
+        server_sock.listen()
 
-        start_event = threading.Event()
-
-        for player_id in range(2):
-            conn, addr = server_sock.accept()
-            print(f"[INFO] Player {player_id + 1} connected from {addr}")
-            rfile = conn.makefile('r')
-            wfile = conn.makefile('w')
-            clients.append((conn, addr, rfile, wfile))
-
-            thread = threading.Thread(
-                target=handle_client,
-                args=(player_id, conn, addr, rfile, wfile, start_event),
-                daemon=True
-            )
-            thread.start()
-        # Koda: Wait for both players to connect
-        print("[INFO] Both players connected. Game can begin.")
-        start_event.set()
-        p1 = {"conn": clients[0][0], "rfile": clients[0][2], "wfile": clients[0][3]}
-        p2 = {"conn": clients[1][0], "rfile": clients[1][2], "wfile": clients[1][3]}
-        run_two_player_session(p1, p2)
-
-# HINT: For multiple clients, you'd need to:
-# 1. Accept connections in a loop
-# 2. Handle each client in a separate thread
-# 3. Import threading and create a handle_client function
+        # Launch a thread to listen for new clients
+        threading.Thread(target=client_listener, args=(server_sock,), daemon=True).start()
+        # Launch a thread to match clients
+        game_matchmaker()
 
 if __name__ == "__main__":
     main()
