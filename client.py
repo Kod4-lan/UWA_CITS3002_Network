@@ -78,12 +78,19 @@ def main():
 
         try:
             while running:
-                user_input = input(" >> ").strip()
-                if user_input.lower() == 'exit':
+                try:
+                    user_input = input(">> ").strip()
+                    if user_input.lower() == "quit":
+                        print("[INFO] Quitting game. Closing connection.")
+                        running = False
+                        s.close()  # Close the socket
+                        break
+                    wfile.write(user_input + '\n')
+                    wfile.flush()
+                except Exception as e:
+                    print(f"[ERROR] Failed to send input: {e}")
                     running = False
                     break
-                wfile.write(user_input + '\n')
-                wfile.flush()
         except KeyboardInterrupt:
             print("\n[INFO] Client exiting.")
 

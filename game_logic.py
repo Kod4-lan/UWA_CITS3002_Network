@@ -194,19 +194,18 @@ def setup_player_board(player, opponent):
     try:
         wfile = player['wfile']
         rfile = player['rfile']
-        wfile.write("Place ships manually (M) or randomly (R)? [M/R]:\n")
+        wfile.write("Place ships manually (M) or randomly (R)? [M/R]  (timeout in 15s):\n")
         wfile.flush()
 
-        choice_line = rfile.readline()
+        choice_line = safe_readline_with_timeout(rfile, 15)
         if not choice_line:
-            opponent['wfile'].write("MESSAGE Opponent disconnected during setup\n")
+            opponent['wfile'].write("MESSAGE Opponent disconnected during setup (timeout or quit)\n")
             opponent['wfile'].write("RESULT WIN\n")
             opponent['wfile'].flush()
             return False
 
-        choice = choice_line.strip().upper()
         board = Board()
-
+        choice = choice_line.strip().upper()
         if choice == 'M':
             for ship_name, ship_size in SHIPS:
                 while True:
@@ -214,7 +213,7 @@ def setup_player_board(player, opponent):
                     wfile.write("Enter starting coordinate (e.g. A1):\n")
                     wfile.flush()
 
-                    coord_line = rfile.readline()
+                    coord_line = safe_readline_with_timeout(rfile, 30)
                     if not coord_line:
                         opponent['wfile'].write("MESSAGE Opponent disconnected during setup\n")
                         opponent['wfile'].write("RESULT WIN\n")
@@ -225,7 +224,7 @@ def setup_player_board(player, opponent):
                     wfile.write("Orientation? Enter 'H' or 'V':\n")
                     wfile.flush()
 
-                    orient_line = rfile.readline()
+                    orient_line = safe_readline_with_timeout(rfile, 30)
                     if not orient_line:
                         opponent['wfile'].write("MESSAGE Opponent disconnected during setup\n")
                         opponent['wfile'].write("RESULT WIN\n")
