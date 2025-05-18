@@ -115,7 +115,8 @@ def game_matchmaker():
                     survivor = run_two_player_session(
                         {"conn": conn1, "rfile": rfile1, "wfile": wfile1, "player_id": player1_id},
                         {"conn": conn2, "rfile": rfile2, "wfile": wfile2, "player_id": player2_id},
-                        spectators
+                        spectators,
+                        player_session
                     )
 
                     # Arrange survivor and spectators

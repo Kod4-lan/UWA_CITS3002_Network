@@ -153,7 +153,7 @@ def run_single_game(p1, p2, spectators, player_session):
             current['wfile'].flush()
 
             try:
-                status, line = safe_readline_with_timeout(current, 30)
+                status, line = safe_readline_with_timeout(current, 15)
                 print(f"[DEBUG] readline status = {status}")
 
                 if status == "closed":
@@ -198,25 +198,28 @@ def run_single_game(p1, p2, spectators, player_session):
                                     print("[WARN] Failed to notify opponent about reconnection.")
 
                                 print(f"[INFO] Player {player_id} reconnected within 60s.")
-                                break  # ✅ 成功重连，跳出等待循环
+                                break  
 
                             time.sleep(1)
                         else:
-                            # 如果 for 循环没有 break（即超时）
+                            
                             opponent["wfile"].write("MESSAGE Opponent did not reconnect in time.\n")
                             opponent["wfile"].write("RESULT WIN\n")
                             opponent["wfile"].flush()
                             return False
-
-                        # ✅ 等待循环后继续主游戏循环
                         continue
-
                     else:
                         opponent["wfile"].write("MESSAGE Opponent ID missing. Ending game.\n")
                         opponent["wfile"].write("RESULT WIN\n")
                         opponent["wfile"].flush()
                         return False
-
+                elif status == "timeout":
+                    current['wfile'].write("MESSAGE Timeout occurred. Your turn was skipped.\n")
+                    current['wfile'].flush()
+                    opponent['wfile'].write("MESSAGE Opponent timed out. Their turn was skipped.\n")
+                    opponent['wfile'].flush()
+                    turn = 1 - turn
+                    continue
                 line = line.strip()
 
                 if line.lower() == 'quit':

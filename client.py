@@ -28,7 +28,7 @@ is_spectator = False
 #
 # import threading
 
-def receive_messages(rfile):
+def receive_messages(rfile, wfile, player_id):
     global is_spectator
     while running:
         try:
@@ -46,6 +46,9 @@ def receive_messages(rfile):
                     if not board_line or board_line.strip() == "":
                         break
                     print(board_line.strip(), flush=True)
+            elif line == "SEND-ID":
+                wfile.write(f"ID {player_id}\n")
+                wfile.flush()
 
             elif line == "GRID_SELF":
                 print("\n[Your Board]")
@@ -88,7 +91,8 @@ def main():
         wfile.flush()
 
 
-        threading.Thread(target=receive_messages, args=(rfile,), daemon=True).start()
+        threading.Thread(target=receive_messages, args=(rfile, wfile, player_id), daemon=True).start()
+
 
         try:
             while running:
