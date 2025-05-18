@@ -1,10 +1,22 @@
 from battleship import Board, parse_coordinate, SHIPS
 import select
 
+def broadcast_to_spectators(spectators, message):
+    """
+    Send a message to all currently connected spectators.
+    Spectators are (conn, rfile, wfile) tuples.
+    """
+    for conn, rfile, wfile in spectators:
+        try:
+            wfile.write(f"MESSAGE [Spectator] {message}\n")
+            wfile.flush()
+        except Exception:
+            continue  # ignore disconnected spectators
 
-def run_two_player_session(p1, p2):
+def run_two_player_session(p1, p2, spectators):
     while True:
-        success = run_single_game(p1, p2)
+        broadcast_to_spectators(spectators, "A new round is starting...")
+        success = run_single_game(p1, p2, spectators)
         if not success:
             break
 
@@ -70,7 +82,7 @@ def check_alive(p, opponent):
         opponent['wfile'].flush()
         return False
 
-def run_single_game(p1, p2):
+def run_single_game(p1, p2, spectators):
     players = [p1, p2]
     turn = 0
 
@@ -92,6 +104,9 @@ def run_single_game(p1, p2):
     send_own_board(p1['wfile'], p1['board'])
     send_own_board(p2['wfile'], p2['board'])
 
+    broadcast_to_spectators(spectators, "A new game has started between two players.")
+    p1['wfile'].write("MESSAGE Both players have placed their ships. Game starting...\n")
+    p2['wfile'].write("MESSAGE Both players have placed their ships. Game starting...\n")
     p1['wfile'].write("Game started! You are Player 1.\n")
     p2['wfile'].write("Game started! You are Player 2.\n")
     p1['wfile'].write("You go first.\n")
@@ -149,6 +164,9 @@ def run_single_game(p1, p2):
                 opponent['wfile'].flush()
                 return False
 
+            if line.upper().startswith("FIRE"):
+                broadcast_to_spectators(spectators, f"Player {turn + 1} fired at {line.split()[1]}")
+
             parts = line.split()
             if len(parts) != 2 or parts[0].upper() != "FIRE":
                 current['wfile'].write("RESULT INVALID INPUT (e.g. FIRE B2)\n")
@@ -172,19 +190,30 @@ def run_single_game(p1, p2):
             result, sunk = opponent['board'].fire_at(row, col)
 
             if result == 'hit':
+                broadcast_to_spectators(spectators, "It was a HIT!")
+            elif result == 'miss':
+                broadcast_to_spectators(spectators, "It was a MISS!")
+            elif result == 'already_shot':
+                broadcast_to_spectators(spectators, "They fired at an already hit position.")
+
+
+            if result == 'hit':
                 if opponent['board'].all_ships_sunk():
                     if sunk:
                         current['wfile'].write(f"RESULT HIT {sunk.upper()}\n")
+                        broadcast_to_spectators(spectators, f"They sank a {sunk.upper()}!")
                     else:
                         current['wfile'].write("RESULT HIT\n")
                     current['wfile'].write("RESULT WIN\n")
                     opponent['wfile'].write("RESULT LOSE\n")
+                    broadcast_to_spectators(spectators, f"Player {turn + 1} won the game!")
                     current['wfile'].flush()
                     opponent['wfile'].flush()
                     return True
                 else:
                     if sunk:
                         current['wfile'].write(f"RESULT HIT {sunk.upper()}\n")
+                        broadcast_to_spectators(spectators, f"They sank a {sunk.upper()}!")
                     else:
                         current['wfile'].write("RESULT HIT\n")
             elif result == 'miss':

@@ -37,9 +37,7 @@ def client_listener(server_sock):
         wfile = conn.makefile('w')
 
         try:
-            # ✅ 判断必须在 acquire lock 之前做！
             if len(ready_queue) < 2 and not active_game_lock.locked():
-                # 是 active player：允许进入 ready queue
                 try:
                     wfile.write("MESSAGE Connected to BEER server. Waiting for a match...\n")
                     wfile.flush()
@@ -76,28 +74,28 @@ def game_matchmaker():
 
                 t = threading.Thread(
                     target=start_game_session_with_unlock,
-                    args=(p1, p2),
+                    args=(p1, p2, spectators),
                     daemon=True
                 )
                 t.start()
             except IndexError:
                 time.sleep(1)
 
-def start_game_session_with_unlock(p1_raw, p2_raw):
+def start_game_session_with_unlock(p1_raw, p2_raw, spectators):
     try:
-        start_game_session(p1_raw, p2_raw)
+        start_game_session(p1_raw, p2_raw, spectators)
     finally:
         active_game_lock.release()
         print("[INFO] Game finished. Lock released.")
 
-def start_game_session(p1_raw, p2_raw):
+def start_game_session(p1_raw, p2_raw, spectators):
     conn1, rfile1, wfile1 = p1_raw
     conn2, rfile2, wfile2 = p2_raw
     p1 = {"conn": conn1, "rfile": rfile1, "wfile": wfile1}
     p2 = {"conn": conn2, "rfile": rfile2, "wfile": wfile2}
 
     try:
-        survivor = run_two_player_session(p1, p2)
+        survivor = run_two_player_session(p1, p2, spectators)
     except Exception as e:
         print(f"[ERROR] Game session crashed: {e}")
         survivor = None
