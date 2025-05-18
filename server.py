@@ -12,56 +12,115 @@ However, if you want to support multiple clients (i.e. progress through further 
 
 import socket
 import threading
-from battleship import run_single_player_game_online,Board, parse_coordinate, SHIPS
-from game_logic import run_two_player_game
-# Koda: Server code for a two-player Battleship game
+from collections import deque
+from game_logic import run_two_player_session
+import time
 
 HOST = '127.0.0.1'
 PORT = 5000
 
-clients = []  # [(conn, addr, rfile, wfile)]
+# Queue to hold waiting clients
+waiting_clients = deque()
+active_game_lock = threading.Lock()
+# A global variable to control the running state of the threads
 
-def handle_client(player_id, conn, addr, rfile, wfile, start_event):
-    # Koda: Waiting for the client to send a command
-    wfile.write(f"Welcome Player {player_id + 1}! Waiting for the other player to connect...\n")
-    wfile.flush()
-    start_event.wait()  # Koda: Block until both players are connected
-    wfile.flush() 
-    # Koda: Placeholder for the game logic  
+def queue_notifier():
+    # notifies clients in the queue about their position
+    # in the queue every 3 seconds
+    while True:
+        time.sleep(3)  # wait for 3 seconds
 
+        temp = []
+        size = len(waiting_clients)
+        for idx in range(size):
+            try:
+                conn, rfile, wfile = waiting_clients.popleft()
+                wfile.write(f"MESSAGE Waiting in queue... you are #{idx + 1}\n")
+                wfile.flush()
+                temp.append((conn, rfile, wfile))
+            except:
+                pass  # skip if client is not available
+
+        # put clients back in the queue
+        for item in temp:
+            waiting_clients.appendleft(item)
+
+
+def client_listener(server_sock):
+    # background thread, accept new clients and put them in the queue
+    while True:
+        conn, addr = server_sock.accept()
+        print(f"[INFO] New client from {addr}")
+        rfile = conn.makefile('r')
+        wfile = conn.makefile('w')
+        wfile.write("MESSAGE Connected to BEER server. Waiting for a match...\n")
+        wfile.flush()
+        waiting_clients.append((conn, rfile, wfile))
+
+def game_matchmaker():
+    while True:
+        if len(waiting_clients) >= 2:
+            if active_game_lock.locked():
+                time.sleep(1)
+                continue  # Can only have one game at a time
+
+            try:
+                p1 = waiting_clients.popleft()
+                p2 = waiting_clients.popleft()
+
+                # Lock before starting a new game
+                active_game_lock.acquire()
+                print("[INFO] Starting a new game...")
+
+                t = threading.Thread(
+                    target=start_game_session_with_unlock,
+                    args=(p1, p2),
+                    daemon=True
+                )
+                t.start()
+            except IndexError:
+                time.sleep(1)
+
+def start_game_session_with_unlock(p1_raw, p2_raw):
+    #release the lock after the game session is done
+    try:
+        start_game_session(p1_raw, p2_raw)
+    finally:
+        active_game_lock.release()
+        print("[INFO] Game finished. Lock released.")
+
+
+def start_game_session(p1_raw, p2_raw):
+    conn1, rfile1, wfile1 = p1_raw
+    conn2, rfile2, wfile2 = p2_raw
+    p1 = {"conn": conn1, "rfile": rfile1, "wfile": wfile1}
+    p2 = {"conn": conn2, "rfile": rfile2, "wfile": wfile2}
+
+    try:
+        survivor = run_two_player_session(p1, p2)
+    except Exception as e:
+        print(f"[ERROR] Game session crashed: {e}")
+        survivor = None
+    finally:
+        print("[INFO] Game session cleaned up.")
+        if survivor:
+            try:
+                waiting_clients.appendleft((survivor['conn'], survivor['rfile'], survivor['wfile']))
+                print("[INFO] Survivor returned to waiting queue.")
+            except Exception as e:
+                print(f"[WARN] Failed to requeue survivor: {e}")
 
 def main():
     print(f"[INFO] Server listening on {HOST}:{PORT}")
     with socket.socket(socket.AF_INET, socket.SOCK_STREAM) as server_sock:
+        server_sock.setsockopt(socket.SOL_SOCKET, socket.SO_REUSEADDR, 1)
         server_sock.bind((HOST, PORT))
-        server_sock.listen(2)
+        server_sock.listen()
 
-        start_event = threading.Event()
-
-        for player_id in range(2):
-            conn, addr = server_sock.accept()
-            print(f"[INFO] Player {player_id + 1} connected from {addr}")
-            rfile = conn.makefile('r')
-            wfile = conn.makefile('w')
-            clients.append((conn, addr, rfile, wfile))
-
-            thread = threading.Thread(
-                target=handle_client,
-                args=(player_id, conn, addr, rfile, wfile, start_event),
-                daemon=True
-            )
-            thread.start()
-        # Koda: Wait for both players to connect
-        print("[INFO] Both players connected. Game can begin.")
-        start_event.set()
-        p1 = {"conn": clients[0][0], "rfile": clients[0][2], "wfile": clients[0][3]}
-        p2 = {"conn": clients[1][0], "rfile": clients[1][2], "wfile": clients[1][3]}
-        run_two_player_game(p1, p2)
-
-# HINT: For multiple clients, you'd need to:
-# 1. Accept connections in a loop
-# 2. Handle each client in a separate thread
-# 3. Import threading and create a handle_client function
+        # Launch a thread to listen for new clients
+        threading.Thread(target=client_listener, args=(server_sock,), daemon=True).start()
+        threading.Thread(target=queue_notifier, daemon=True).start()
+        game_matchmaker()
 
 if __name__ == "__main__":
     main()
