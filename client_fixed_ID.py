@@ -27,8 +27,7 @@ is_spectator = False
 # - The main thread handles user input and sends it to the server
 #
 # import threading
-
-def receive_messages(rfile, wfile, player_id):
+def receive_messages(rfile):
     global is_spectator
     while running:
         try:
@@ -46,9 +45,6 @@ def receive_messages(rfile, wfile, player_id):
                     if not board_line or board_line.strip() == "":
                         break
                     print(board_line.strip(), flush=True)
-            elif line == "SEND-ID":
-                wfile.write(f"ID {player_id}\n")
-                wfile.flush()
 
             elif line == "GRID_SELF":
                 print("\n[Your Board]")
@@ -79,7 +75,8 @@ def main():
     global running
     global is_spectator
 
-    player_id = str(uuid.uuid4())
+    #player_id = str(uuid.uuid4())
+    player_id = "1234"
     print(f"[INFO] Your player ID: {player_id}")
     
     with socket.socket(socket.AF_INET, socket.SOCK_STREAM) as s:
@@ -91,8 +88,7 @@ def main():
         wfile.flush()
 
 
-        threading.Thread(target=receive_messages, args=(rfile, wfile, player_id), daemon=True).start()
-
+        threading.Thread(target=receive_messages, args=(rfile,), daemon=True).start()
 
         try:
             while running:
@@ -101,16 +97,13 @@ def main():
                     continue
 
                 user_input = input(">> ").strip()
+                print(f"[DEBUG] Sending: {user_input}")
                 if user_input.lower() == "quit":
                     wfile.write("quit\n")
                     wfile.flush()
-                    print("[INFO] Quitting game. Closing connection.")
+                    print("[INFO] You have quit the game. You can reconnect within 60s.")
                     running = False
-                    wfile.close()
-                    rfile.close()
-                    s.shutdown(socket.SHUT_RDWR)
-                    s.close()
-                    break
+                    break  
 
                 wfile.write(user_input + '\n')
                 wfile.flush()
@@ -119,21 +112,6 @@ def main():
             print("\n[INFO] Client exiting.")
             running = False
 
-# HINT: A better approach would be something like:
-#
-# def receive_messages(rfile):
-#     """Continuously receive and display messages from the server"""
-#     while running:
-#         line = rfile.readline()
-#         if not line:
-#             print("[INFO] Server disconnected.")
-#             break
-#         # Process and display the message
-#
-# def main():
-#     # Set up connection
-#     # Start a thread for receiving messages
-#     # Main thread handles sending user input
 
 if __name__ == "__main__":
     main()
