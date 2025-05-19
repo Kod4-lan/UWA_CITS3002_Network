@@ -11,6 +11,15 @@ import socket
 import threading
 import time
 import uuid
+from utils import (
+    encode_packet,
+    decode_packet,
+    send_packet_message,
+    PACKET_TYPE_MESSAGE,
+    PACKET_TYPE_COMMAND,
+    PACKET_TYPE_RESULT,
+    PACKET_TYPE_CONTROL
+)
 
 HOST = '127.0.0.1'
 PORT = 5000
@@ -37,42 +46,72 @@ def receive_messages(rfile, wfile, player_id):
                 print("[INFO] Server disconnected.")
                 break
 
-            line = line.strip()
+            pkt_type, checksum, payload = decode_packet(line)
+            if pkt_type is None:
+                payload = line.strip()
+                pkt_type = 1  # fallback to message
 
-            if line == "GRID":
-                print("\n[Board]")
-                while True:
-                    board_line = rfile.readline()
-                    if not board_line or board_line.strip() == "":
-                        break
-                    print(board_line.strip(), flush=True)
-            elif line == "SEND-ID":
+            # special commands
+            if payload == "SEND-ID":
                 wfile.write(f"ID {player_id}\n")
                 wfile.flush()
+                continue
 
-            elif line == "GRID_SELF":
+            # Board: opponent's perspective
+            if payload == "GRID_OPPONENT":
+                print("\n[Opponent's Board]")
+                while True:
+                    board_line = rfile.readline()
+                    if not board_line.strip():
+                        break 
+                    pkt_type, _, board_payload = decode_packet(board_line)
+                    if pkt_type is None:
+                        board_payload = board_line.strip()
+                    print(board_payload)
+                continue
+
+            # Board: your perspective
+            if payload == "GRID_SELF":
                 print("\n[Your Board]")
                 while True:
                     board_line = rfile.readline()
-                    if not board_line or board_line.strip() == "":
+                    if not board_line.strip():
                         break
-                    print(board_line.strip(), flush=True)
+                    pkt_type, _, board_payload = decode_packet(board_line)
+                    if pkt_type is None:
+                        board_payload = board_line.strip()
+                    print(board_payload)
+                continue
 
-            elif line.startswith("MESSAGE Connected as spectator"):
+            # Spectator mode
+            if "Connected as spectator" in payload:
                 is_spectator = True
-                print(line, flush=True)
+                print(payload, flush=True)
                 print(">> Spectator mode. No input required.", flush=True)
+                continue
+            elif "You are being promoted to a player" in payload:
+                print(payload)
+                print("[INFO] Sending player ID again...")
+                wfile.write(f"ID {player_id}\n")
+                wfile.flush()
+                is_spectator = False
+                continue
 
-            elif line.startswith(("RESULT", "MESSAGE")):
-                print(line, flush=True)
 
+            if pkt_type == 1:  # MESSAGE
+                print(payload, flush=True)
+            elif pkt_type == 3:  # RESULT
+                print("[Result]", payload, flush=True)
+            elif pkt_type == 4:  # PING
+                # Heartbeat ping - no output
+                pass
             else:
-                # Default print for prompts or other messages
-                print(line, flush=True)
+                print(payload, flush=True)  # fallback 
 
         except Exception as e:
             print(f"[ERROR] Connection lost: {e}")
             break
+
 
 
 def main():
@@ -102,7 +141,8 @@ def main():
 
                 user_input = input(">> ").strip()
                 if user_input.lower() == "quit":
-                    wfile.write("quit\n")
+                    pkt = encode_packet(2, "quit")  # type 2 means command
+                    wfile.write(pkt + '\n')
                     wfile.flush()
                     print("[INFO] Quitting game. Closing connection.")
                     running = False
@@ -112,8 +152,10 @@ def main():
                     s.close()
                     break
 
-                wfile.write(user_input + '\n')
+                pkt = encode_packet(2, user_input)
+                wfile.write(pkt + '\n')
                 wfile.flush()
+
 
         except KeyboardInterrupt:
             print("\n[INFO] Client exiting.")

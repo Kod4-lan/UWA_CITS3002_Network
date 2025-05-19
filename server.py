@@ -4,6 +4,13 @@ from collections import deque
 from game_logic import run_two_player_session
 import time
 import traceback
+from utils import encode_packet, decode_packet, send_packet_message
+'''
+PACKET_TYPE_MESSAGE = 1
+PACKET_TYPE_COMMAND = 2
+PACKET_TYPE_RESULT = 3
+PACKET_TYPE_CONTROL = 4
+'''
 
 HOST = '127.0.0.1'
 PORT = 5000
@@ -24,8 +31,7 @@ def queue_notifier():
         for idx in range(size):
             try:
                 conn, rfile, wfile, _ = ready_queue.popleft()
-                wfile.write(f"MESSAGE Waiting in queue... you are #{idx + 1}\n")
-                wfile.flush()
+                send_packet_message(wfile, 1, f"MESSAGE Waiting in queue... you are #{idx + 1}")
                 temp.append((conn, rfile, wfile, _))
             except Exception as e:
                 print(f"[WARN] Failed to notify waiting client: {e}")
@@ -73,16 +79,14 @@ def client_listener(server_sock):
 
             if len(ready_queue) < 2 and not active_game_lock.locked():
                 try:
-                    wfile.write("MESSAGE Connected to BEER server. Waiting for a match...\n")
-                    wfile.flush()
+                    send_packet_message(wfile, 1, "MESSAGE Connected as player. Waiting for a match...")
                     ready_queue.append((conn, rfile, wfile, player_id))
                 except Exception as e:
                     print(f"[ERROR] Failed to connect player: {e}")
                     conn.close()
             else:
                 try:
-                    wfile.write("MESSAGE Connected as spectator. You will observe the current match.\n")
-                    wfile.flush()
+                    send_packet_message(wfile, 1, "MESSAGE Spectator mode. Waiting for a match...")
                     spectators.append((conn, rfile, wfile))
                 except Exception as e:
                     print(f"[ERROR] Failed to connect spectator: {e}")
@@ -96,12 +100,10 @@ def client_listener(server_sock):
 
 def game_matchmaker():
     while True:
-        # make sure at least 2 players are in the queue
         if len(ready_queue) >= 2 and not active_game_lock.locked():
             p1 = ready_queue.popleft()
             p2 = ready_queue.popleft()
 
-            # unpack for identification
             conn1, rfile1, wfile1, player1_id = p1
             conn2, rfile2, wfile2, player2_id = p2
 
@@ -109,7 +111,6 @@ def game_matchmaker():
             print(f"[DEBUG] p1: {p1}")
             print(f"[DEBUG] p2: {p2}")
 
-            # Launch a new thread for the game session
             def start():
                 with active_game_lock:
                     survivor = run_two_player_session(
@@ -119,12 +120,10 @@ def game_matchmaker():
                         player_session
                     )
 
-                    # Arrange survivor and spectators
                     if survivor:
                         try:
-                            survivor['wfile'].write("MESSAGE Waiting for a new opponent...\n")
-                            survivor['wfile'].flush()
-                        except:
+                            send_packet_message(survivor['wfile'], 1, "Waiting for a new opponent...")
+                        except Exception:
                             print("[WARN] Could not notify survivor.")
                         ready_queue.append((
                             survivor['conn'],
@@ -133,14 +132,19 @@ def game_matchmaker():
                             survivor['player_id']
                         ))
 
-                    # switch spectators to players
+                    # ✅ check if there are spectators waiting
                     while len(ready_queue) < 2 and spectators:
                         new_conn, new_rfile, new_wfile = spectators.pop(0)
                         try:
-                            new_wfile.write("MESSAGE You are being promoted to a player. Send your ID again.\n")
-                            new_wfile.write("SEND-ID\n")
-                            new_wfile.flush()
+                            #check if the connection is still alive
+                            send_packet_message(new_wfile, 4, "PING")
+                        except Exception as e:
+                            print(f"[SKIP] Spectator connection dead, skipping: {e}")
+                            continue  
 
+                        try:
+                            send_packet_message(new_wfile, 1, "You are being promoted to a player. Send your ID again.")
+                            send_packet_message(new_wfile, 2, "SEND-ID")
                             id_line = new_rfile.readline()
                             if id_line.startswith("ID "):
                                 new_id = id_line.strip().split(" ", 1)[1]
@@ -155,7 +159,6 @@ def game_matchmaker():
                                 ready_queue.append((new_conn, new_rfile, new_wfile, new_id))
                             else:
                                 print("[WARN] Spectator failed to send ID.")
-
                         except Exception as e:
                             print(f"[ERROR] Failed to promote spectator: {e}")
 
@@ -165,6 +168,7 @@ def game_matchmaker():
             threading.Thread(target=start, daemon=True).start()
 
         time.sleep(1)
+
 
 
 def start_game_session_with_unlock(p1_raw, p2_raw, spectators):

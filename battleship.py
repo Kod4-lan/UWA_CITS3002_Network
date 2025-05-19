@@ -12,8 +12,7 @@ import random
 
 BOARD_SIZE = 10
 SHIPS = [
-    ("Test Ship 1", 1),
-    ("Test Ship 2", 1)
+    ("Test Ship 1", 1)
     #("Carrier", 5),
     #("Battleship", 4),
     #("Cruiser", 3),
