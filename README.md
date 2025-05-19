@@ -6,6 +6,18 @@
 
 A turn-based, networked Battleship game built for the CITS3002 Computer Networks project.
 
+## 🗂️ File Overview
+
+| File                | Purpose |
+|---------------------|---------|
+| `server.py`         | Server entry point, manages game sessions, clients, matchmaking, and spectators |
+| `client.py`         | Main client used by players and spectators |
+| `client_fixed_ID.py`| Debug client with fixed ID for reconnect testing |
+| `game_logic.py`     | Game flow, reconnection handling, turn management |
+| `utils.py`          | Protocol encoding/decoding with checksum validation |
+| `battleship.py`     | Core board logic: placement, hits, ship state |
+
+
 ## 🚀 Features Implemented
 
 ### ✅ Tier 1: Basic 2-Player Concurrency
